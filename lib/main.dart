@@ -4,13 +4,20 @@ import 'package:provider/provider.dart';
 import 'package:git2dart/git2dart.dart';
 import 'providers/app_state.dart';
 import 'screens/home_screen.dart';
+import 'services/logger_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // 初始化日志服务
+  final logger = LoggerService();
+  await logger.init();
+  logger.info('Main', '应用启动');
+  
   // Android 平台初始化 git2dart
   if (Platform.isAndroid) {
     await PlatformSpecific.androidInitialize();
+    logger.debug('Main', 'git2dart 初始化完成 (Android)');
   }
   
   runApp(const MyApp());

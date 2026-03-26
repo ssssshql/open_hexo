@@ -99,6 +99,9 @@ class HexoService {
     
     final content = _generateFrontMatter(article);
     await file.writeAsString(content);
+    
+    // 确保文件已写入磁盘（Android 文件系统缓存）
+    await file.lastModified();
   }
 
   Future<void> deleteArticle(Article article) async {

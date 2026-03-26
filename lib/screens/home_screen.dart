@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
+import '../widgets/custom_toast.dart';
 import 'config_screen.dart';
 import 'article_list_screen.dart';
 import 'article_edit_screen.dart';
+import 'about_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,7 +16,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  final TextEditingController _commitMessageController = TextEditingController();
+  bool _isFABExpanded = false;
 
   @override
   void initState() {
@@ -38,22 +40,55 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _pullRepo() async {
     final success = await context.read<AppState>().pullRepo();
     if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('拉取成功')),
+      CustomToast.show(
+        context,
+        message: '拉取成功',
+        type: ToastType.success,
       );
     }
   }
 
   Future<void> _pushRepo() async {
+    // 先预览提交信息
+    final commitMessage = await context.read<AppState>().previewCommitMessage();
+    
+    if (!mounted) return;
+    
+    if (commitMessage == null) {
+      CustomToast.show(
+        context,
+        message: '没有需要推送的更改',
+        type: ToastType.warning,
+      );
+      return;
+    }
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('推送更改'),
-        content: TextField(
-          controller: _commitMessageController,
-          decoration: const InputDecoration(
-            labelText: '提交信息',
-            hintText: '输入本次更改的描述',
+        title: const Text('确认推送'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('提交信息:'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  commitMessage,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -63,49 +98,78 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('推送'),
+            child: const Text('确定'),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      final message = _commitMessageController.text.trim().isEmpty
-          ? '更新文章 ${DateTime.now().toString().split('.').first}'
-          : _commitMessageController.text.trim();
-      
-      final success = await context.read<AppState>().pushRepo(message);
-      _commitMessageController.clear();
+      final success = await context.read<AppState>().pushRepo();
       
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('推送成功')),
+        CustomToast.show(
+          context,
+          message: '推送成功',
+          type: ToastType.success,
         );
       }
     }
   }
 
-  @override
-  void dispose() {
-    _commitMessageController.dispose();
-    super.dispose();
+  Widget _buildMiniFAB({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade800,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        FloatingActionButton(
+          heroTag: label,
+          mini: true,
+          shape: const CircleBorder(),
+          onPressed: onPressed,
+          child: Icon(icon, size: 20),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Consumer<AppState>(
-        builder: (context, appState, child) {
-          return IndexedStack(
-            index: _currentIndex,
-            children: [
-              const ArticleListScreen(),
-              const ConfigScreen(),
-            ],
-          );
-        },
-      ),
-      bottomNavigationBar: NavigationBar(
+    return Stack(
+      children: [
+        Scaffold(
+          body: Consumer<AppState>(
+            builder: (context, appState, child) {
+              return IndexedStack(
+                index: _currentIndex,
+                children: [
+                  const ArticleListScreen(),
+                  const ConfigScreen(),
+                  const AboutScreen(),
+                ],
+              );
+            },
+          ),
+          bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
           setState(() {
@@ -123,47 +187,113 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIcon: Icon(Icons.settings),
             label: '配置',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.info_outline),
+            selectedIcon: Icon(Icons.info),
+            label: '关于',
+          ),
         ],
       ),
-      floatingActionButton: _currentIndex == 0
+        floatingActionButton: _currentIndex == 0
           ? Consumer<AppState>(
               builder: (context, appState, child) {
                 if (!appState.isConfigured) {
                   return const SizedBox.shrink();
                 }
-                
+
                 return Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    if (_isFABExpanded) ...[
+                      _buildMiniFAB(
+                        icon: Icons.add,
+                        label: '新建',
+                        onPressed: () {
+                          setState(() => _isFABExpanded = false);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ArticleEditScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _buildMiniFAB(
+                        icon: Icons.cloud_download,
+                        label: '拉取',
+                        onPressed: () {
+                          setState(() => _isFABExpanded = false);
+                          _pullRepo();
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _buildMiniFAB(
+                        icon: Icons.cloud_upload,
+                        label: '推送',
+                        onPressed: () {
+                          setState(() => _isFABExpanded = false);
+                          _pushRepo();
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     FloatingActionButton(
-                      heroTag: 'add',
+                      heroTag: 'main',
+                      shape: const CircleBorder(),
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ArticleEditScreen(),
-                          ),
-                        );
+                        setState(() => _isFABExpanded = !_isFABExpanded);
                       },
-                      child: const Icon(Icons.add),
-                    ),
-                    const SizedBox(height: 8),
-                    FloatingActionButton(
-                      heroTag: 'pull',
-                      onPressed: _pullRepo,
-                      child: const Icon(Icons.cloud_download),
-                    ),
-                    const SizedBox(height: 8),
-                    FloatingActionButton(
-                      heroTag: 'push',
-                      onPressed: _pushRepo,
-                      child: const Icon(Icons.cloud_upload),
+                      child: AnimatedRotation(
+                        turns: _isFABExpanded ? 0.125 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(_isFABExpanded ? Icons.close : Icons.menu),
+                      ),
                     ),
                   ],
                 );
               },
             )
           : null,
+        ),
+        // 全局加载遮罩层
+        Consumer<AppState>(
+          builder: (context, appState, child) {
+            if (!appState.isLoading) return const SizedBox.shrink();
+            
+            return Positioned.fill(
+              child: Container(
+                color: Colors.black38,
+                child: Center(
+                  child: Card(
+                    elevation: 8,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: CircularProgressIndicator(),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            appState.statusMessage,
+                            style: const TextStyle(fontSize: 16),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

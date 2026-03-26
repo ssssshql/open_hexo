@@ -6,9 +6,12 @@
 
 #include "generated_plugin_registrant.h"
 
+#include <gal/gal_plugin_c_api.h>
 #include <git2dart_binaries/git2dart_binaries_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
+  GalPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("GalPluginCApi"));
   Git2dartBinariesPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("Git2dartBinariesPluginCApi"));
 }
