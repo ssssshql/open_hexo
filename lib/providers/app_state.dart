@@ -160,7 +160,9 @@ class AppState extends ChangeNotifier {
 
     _logger.info('AppState', '创建文章: ${article.title}');
     try {
-      await _hexoService.createArticle(_config!.localPath, article);
+      final filePath = await _hexoService.createArticle(_config!.localPath, article);
+      // 将文件添加到 Git 索引
+      await _gitService.addFileToIndex(_config!.localPath, filePath);
       await loadArticles();
       _logger.info('AppState', '文章创建成功');
       return true;
@@ -172,9 +174,13 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> updateArticle(Article article) async {
+    if (_config == null) return false;
+    
     _logger.info('AppState', '更新文章: ${article.title}');
     try {
       await _hexoService.updateArticle(article);
+      // 将文件添加到 Git 索引
+      await _gitService.addFileToIndex(_config!.localPath, article.filePath);
       await loadArticles();
       _logger.info('AppState', '文章更新成功');
       return true;

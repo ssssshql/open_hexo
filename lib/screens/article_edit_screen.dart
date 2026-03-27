@@ -27,7 +27,7 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
   late ScrollController _previewScrollController;
   bool _isEdit = false;
   bool _isPreview = false; // false: 编辑, true: 预览
-  
+
   @override
   void initState() {
     super.initState();
@@ -80,7 +80,7 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
 
     final appState = context.read<AppState>();
     bool success;
-    
+
     if (_isEdit) {
       success = await appState.updateArticle(article);
     } else {
@@ -120,14 +120,12 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final success = await context.read<AppState>().deleteArticle(widget.article!);
+      final success = await context.read<AppState>().deleteArticle(
+        widget.article!,
+      );
       if (success && mounted) {
         Navigator.pop(context);
-        CustomToast.show(
-          context,
-          message: '文章已删除',
-          type: ToastType.success,
-        );
+        CustomToast.show(context, message: '文章已删除', type: ToastType.success);
       }
     }
   }
@@ -136,15 +134,15 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
     final text = _contentController.text;
     final selection = _contentController.selection;
     final selectedText = selection.textInside(text);
-    
+
     final codeBlock = '```\n$selectedText\n```';
-    
+
     _contentController.text = text.replaceRange(
       selection.start,
       selection.end,
       codeBlock,
     );
-    
+
     _contentController.selection = TextSelection.collapsed(
       offset: selection.start + 4,
     );
@@ -154,15 +152,15 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
     final text = _contentController.text;
     final selection = _contentController.selection;
     final selectedText = selection.textInside(text);
-    
+
     final heading = '## $selectedText';
-    
+
     _contentController.text = text.replaceRange(
       selection.start,
       selection.end,
       heading,
     );
-    
+
     _contentController.selection = TextSelection.collapsed(
       offset: selection.start + 3,
     );
@@ -172,15 +170,15 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
     final text = _contentController.text;
     final selection = _contentController.selection;
     final selectedText = selection.textInside(text);
-    
+
     final bold = '**$selectedText**';
-    
+
     _contentController.text = text.replaceRange(
       selection.start,
       selection.end,
       bold,
     );
-    
+
     if (selectedText.isEmpty) {
       _contentController.selection = TextSelection.collapsed(
         offset: selection.start + 2,
@@ -192,15 +190,15 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
     final text = _contentController.text;
     final selection = _contentController.selection;
     final selectedText = selection.textInside(text);
-    
+
     final link = '[$selectedText](url)';
-    
+
     _contentController.text = text.replaceRange(
       selection.start,
       selection.end,
       link,
     );
-    
+
     _contentController.selection = TextSelection.collapsed(
       offset: selection.start + link.length - 4,
     );
@@ -224,10 +222,7 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
               icon: const Icon(Icons.delete),
               onPressed: _deleteArticle,
             ),
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveArticle,
-          ),
+          IconButton(icon: const Icon(Icons.save), onPressed: _saveArticle),
         ],
       ),
       body: Form(
@@ -245,13 +240,22 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
                       label: RichText(
                         text: TextSpan(
                           children: [
-                            TextSpan(text: '文章标题 ', style: TextStyle(color: Colors.grey.shade700)),
-                            const TextSpan(text: '*', style: TextStyle(color: Colors.red)),
+                            TextSpan(
+                              text: '文章标题 ',
+                              style: TextStyle(color: Colors.grey.shade700),
+                            ),
+                            const TextSpan(
+                              text: '*',
+                              style: TextStyle(color: Colors.red),
+                            ),
                           ],
                         ),
                       ),
                       border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -270,7 +274,10 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
                             labelText: '标签',
                             hintText: '逗号分隔',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             isDense: true,
                           ),
                         ),
@@ -283,7 +290,10 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
                             labelText: '分类',
                             hintText: '逗号分隔',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             isDense: true,
                           ),
                         ),
@@ -293,11 +303,9 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
                 ],
               ),
             ),
-            
+
             // 内容区域
-            Expanded(
-              child: _isPreview ? _buildPreview() : _buildEditor(),
-            ),
+            Expanded(child: _isPreview ? _buildPreview() : _buildEditor()),
           ],
         ),
       ),
@@ -337,10 +345,7 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
                       const Spacer(),
                       Text(
                         '${_contentController.text.length}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                     ],
                   ),
@@ -389,9 +394,9 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
 /// 自定义 Markdown 预览组件（支持代码高亮）
 class _MarkdownPreview extends StatelessWidget {
   final String content;
-  
+
   const _MarkdownPreview({required this.content});
-  
+
   @override
   Widget build(BuildContext context) {
     final widgets = _parseMarkdown(context, content);
@@ -400,16 +405,19 @@ class _MarkdownPreview extends StatelessWidget {
       children: widgets,
     );
   }
-  
+
   List<Widget> _parseMarkdown(BuildContext context, String markdown) {
     final widgets = <Widget>[];
-    
+
     // 使用正则匹配代码块 - 支持各种格式
-    final codeBlockRegex = RegExp(r'```([a-zA-Z0-9+_-]*)\s*\n([\s\S]*?)\n?```', multiLine: true);
-    
+    final codeBlockRegex = RegExp(
+      r'```([a-zA-Z0-9+_-]*)\s*\n([\s\S]*?)\n?```',
+      multiLine: true,
+    );
+
     int lastEnd = 0;
     final matches = codeBlockRegex.allMatches(markdown);
-    
+
     for (final match in matches) {
       // 添加代码块之前的普通 Markdown 内容
       if (match.start > lastEnd) {
@@ -418,7 +426,8 @@ class _MarkdownPreview extends StatelessWidget {
           widgets.add(
             MarkdownBody(
               data: normalContent,
-              imageBuilder: (uri, title, alt) => _buildImageWithPlaceholder(context, uri),
+              imageBuilder: (uri, title, alt) =>
+                  _buildImageWithPlaceholder(context, uri),
               styleSheet: MarkdownStyleSheet(
                 code: TextStyle(
                   backgroundColor: Colors.grey.shade200,
@@ -431,16 +440,16 @@ class _MarkdownPreview extends StatelessWidget {
           );
         }
       }
-      
+
       // 添加代码块
       final language = match.group(1)?.trim() ?? '';
       final code = match.group(2) ?? '';
-      
+
       widgets.add(_CodeBlockView(code: code, language: language));
-      
+
       lastEnd = match.end;
     }
-    
+
     // 添加最后剩余的 Markdown 内容
     if (lastEnd < markdown.length) {
       final normalContent = markdown.substring(lastEnd);
@@ -448,7 +457,8 @@ class _MarkdownPreview extends StatelessWidget {
         widgets.add(
           MarkdownBody(
             data: normalContent,
-            imageBuilder: (uri, title, alt) => _buildImageWithPlaceholder(context, uri),
+            imageBuilder: (uri, title, alt) =>
+                _buildImageWithPlaceholder(context, uri),
             styleSheet: MarkdownStyleSheet(
               code: TextStyle(
                 backgroundColor: Colors.grey.shade200,
@@ -461,10 +471,10 @@ class _MarkdownPreview extends StatelessWidget {
         );
       }
     }
-    
+
     return widgets.isEmpty ? [const Text('')] : widgets;
   }
-  
+
   Widget _buildImageWithPlaceholder(BuildContext context, Uri uri) {
     return GestureDetector(
       onTap: () => ImageViewer.show(context, uri.toString()),
@@ -492,10 +502,7 @@ class _MarkdownPreview extends StatelessWidget {
                     SizedBox(height: 12),
                     Text(
                       '加载中...',
-                      style: TextStyle(
-                        color: Color(0xFF757575),
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Color(0xFF757575), fontSize: 12),
                     ),
                   ],
                 ),
@@ -522,7 +529,11 @@ class _MarkdownPreview extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.broken_image, size: 48, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.broken_image,
+                          size: 48,
+                          color: Colors.grey.shade400,
+                        ),
                         const SizedBox(height: 8),
                         const Text(
                           '图片加载失败',
@@ -549,20 +560,19 @@ class _CodeBlockView extends StatelessWidget {
   final String code;
   final String language;
 
-  const _CodeBlockView({
-    required this.code,
-    required this.language,
-  });
+  const _CodeBlockView({required this.code, required this.language});
 
   @override
   Widget build(BuildContext context) {
     // 规范化语言名称
     final normalizedLanguage = _normalizeLanguage(language);
-    
+
     // 调试信息
     print('_CodeBlockView - 原始语言: "$language", 规范化后: "$normalizedLanguage"');
-    print('_CodeBlockView - 代码内容: "${code.substring(0, code.length > 50 ? 50 : code.length)}..."');
-    
+    print(
+      '_CodeBlockView - 代码内容: "${code.substring(0, code.length > 50 ? 50 : code.length)}..."',
+    );
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
@@ -578,7 +588,9 @@ class _CodeBlockView extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.black26,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(8),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -586,7 +598,9 @@ class _CodeBlockView extends StatelessWidget {
                 Icon(Icons.code, size: 14, color: Colors.grey.shade400),
                 const SizedBox(width: 6),
                 Text(
-                  normalizedLanguage.isNotEmpty ? normalizedLanguage.toUpperCase() : 'CODE',
+                  normalizedLanguage.isNotEmpty
+                      ? normalizedLanguage.toUpperCase()
+                      : 'CODE',
                   style: TextStyle(
                     color: Colors.grey.shade400,
                     fontSize: 11,
@@ -603,12 +617,11 @@ class _CodeBlockView extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: HighlightView(
               code.trim(),
-              language: normalizedLanguage.isNotEmpty ? normalizedLanguage : 'plaintext',
+              language: normalizedLanguage.isNotEmpty
+                  ? normalizedLanguage
+                  : 'plaintext',
               theme: vs2015Theme,
-              textStyle: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-              ),
+              textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 13),
               padding: EdgeInsets.zero,
             ),
           ),
@@ -616,11 +629,11 @@ class _CodeBlockView extends StatelessWidget {
       ),
     );
   }
-  
+
   /// 规范化语言名称，确保与 highlight 包兼容
   String _normalizeLanguage(String lang) {
     if (lang.isEmpty) return 'plaintext';
-    
+
     // 常见语言别名映射
     final languageMap = {
       'js': 'javascript',
@@ -638,7 +651,7 @@ class _CodeBlockView extends StatelessWidget {
       'docker': 'dockerfile',
       'dockerfile': 'dockerfile',
     };
-    
+
     final normalized = lang.toLowerCase().trim();
     return languageMap[normalized] ?? normalized;
   }

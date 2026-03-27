@@ -77,10 +77,10 @@ class HexoService {
     );
   }
 
-  Future<void> createArticle(String repoPath, Article article) async {
+  Future<String> createArticle(String repoPath, Article article) async {
     final sourcePath = p.join(repoPath, 'source', '_posts');
     final postsDir = Directory(sourcePath);
-    
+
     if (!await postsDir.exists()) {
       await postsDir.create(recursive: true);
     }
@@ -88,9 +88,14 @@ class HexoService {
     final fileName = _sanitizeFileName(article.title);
     final filePath = p.join(sourcePath, '$fileName.md');
     final file = File(filePath);
-    
+
     final content = _generateFrontMatter(article);
     await file.writeAsString(content);
+
+    // 确保文件已写入磁盘（Android 文件系统缓存）
+    await file.lastModified();
+
+    return filePath;
   }
 
   Future<void> updateArticle(Article article) async {
@@ -139,9 +144,17 @@ class HexoService {
   }
 
   String _sanitizeFileName(String title) {
-    return title
-        .replaceAll(RegExp(r'[^\w\s-]'), '')
+    // 保留中文、字母、数字、空格、连字符、下划线
+    var sanitized = title
+        .replaceAll(RegExp(r'[^\w\s\u4e00-\u9fa5-]'), '')
         .replaceAll(RegExp(r'\s+'), '-')
         .toLowerCase();
+    
+    // 如果结果为空，使用时间戳
+    if (sanitized.isEmpty) {
+      sanitized = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+    
+    return sanitized;
   }
 }

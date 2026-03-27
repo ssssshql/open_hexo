@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
+import 'package:flutter/foundation.dart';
 import 'package:git2dart/git2dart.dart';
 import 'package:path/path.dart' as p;
 import '../models/repo_config.dart';
@@ -72,71 +72,93 @@ class GitService {
 
       onProgress?.call('正在克隆仓库...');
 
-      // 使用 compute 在隔离中执行克隆（避免阻塞 UI）
-      // git2dart 的克隆是同步操作，需要在后台执行
-      final result = await _runWithTimeout<Repository?>(
-        () => _cloneInIsolate(config),
-        '克隆仓库',
-        cloneTimeout,
-        onProgress: onProgress,
+      // 使用 compute 在后台线程执行克隆（避免阻塞 UI）
+      // git2dart 的克隆是同步操作，必须在后台执行
+      final cloneParams = _CloneParams(
+        repoUrl: config.repoUrl,
+        localPath: config.localPath,
+        authUsername: config.authUsername,
+        authToken: config.authToken,
       );
+      
+      _logger.debug('GitService', '开始后台克隆任务');
+      
+      final result = await compute(_cloneInIsolate, cloneParams)
+          .timeout(
+            cloneTimeout,
+            onTimeout: () {
+              _logger.warning('GitService', '克隆超时');
+              return _CloneResult(error: '克隆超时: 网络连接可能不稳定，请检查网络后重试');
+            },
+          );
 
-      if (result == null) {
-        return '克隆失败: 未知错误';
+      _logger.debug('GitService', '后台克隆任务返回: ${result.error ?? "成功"}');
+
+      if (result.error != null) {
+        _logger.error('GitService', '克隆失败: ${result.error}');
+        return result.error;
       }
 
-      final repo = result;
-
-      // 如果分支不是默认分支，需要切换
-      final defaultBranch = repo.head.shorthand;
-      if (config.branch.isNotEmpty && config.branch != defaultBranch) {
-        onProgress?.call('切换到分支 ${config.branch}...');
-        _logger.debug('GitService', '切换分支: ${config.branch}');
+      // 检查并切换到指定分支
+      if (config.branch.isNotEmpty) {
+        onProgress?.call('检查分支 ${config.branch}...');
+        _logger.debug('GitService', '检查分支: ${config.branch}');
         
-        // 获取远程分支
-        final remoteBranchRef = 'refs/remotes/origin/${config.branch}';
-        final remoteBranch = Reference.lookup(repo: repo, name: remoteBranchRef);
-        
-        // 创建本地分支
-        final commit = Commit.lookup(repo: repo, oid: remoteBranch.target);
-        Branch.create(repo: repo, name: config.branch, target: commit);
-        
-        // 切换到该分支
-        Reference.setTarget(
-          repo: repo,
-          name: 'refs/HEAD',
-          target: 'refs/heads/${config.branch}',
-          logMessage: 'checkout: moving to ${config.branch}',
-        );
-        Checkout.head(repo: repo);
+        final repo = Repository.open(config.localPath);
+        try {
+          // 获取当前分支名
+          String? currentBranch;
+          try {
+            currentBranch = repo.head.shorthand;
+          } catch (_) {
+            // HEAD 可能未指向任何分支
+          }
+          
+          _logger.debug('GitService', '当前分支: $currentBranch, 目标分支: ${config.branch}');
+          
+          // 如果当前分支就是目标分支，无需切换
+          if (currentBranch == config.branch) {
+            _logger.debug('GitService', '已在目标分支，无需切换');
+          } else {
+            // 需要切换分支
+            onProgress?.call('切换到分支 ${config.branch}...');
+            
+            // 检查本地分支是否已存在
+            bool branchExists = false;
+            try {
+              Branch.lookup(repo: repo, name: config.branch);
+              branchExists = true;
+            } catch (_) {
+              // 分支不存在
+            }
+            
+            // 如果分支不存在，从远程分支创建
+            if (!branchExists) {
+              final remoteBranchRef = 'refs/remotes/origin/${config.branch}';
+              final remoteBranch = Reference.lookup(repo: repo, name: remoteBranchRef);
+              final commit = Commit.lookup(repo: repo, oid: remoteBranch.target);
+              Branch.create(repo: repo, name: config.branch, target: commit);
+            }
+            
+            // 切换到该分支
+            repo.setHead('refs/heads/${config.branch}');
+            Checkout.head(repo: repo);
+          }
+        } finally {
+          repo.free();
+        }
       }
 
       onProgress?.call('克隆完成');
       _logger.info('GitService', '克隆仓库完成: ${config.localPath}');
       
-      // 释放资源
-      repo.free();
       return null;
-    } on GitTimeoutException catch (e) {
-      _logger.error('GitService', '克隆超时', e);
+    } on TimeoutException {
+      _logger.error('GitService', '克隆超时');
       return '克隆超时: 网络连接可能不稳定，请检查网络后重试';
     } catch (e, stackTrace) {
       _logger.error('GitService', '克隆失败', e, stackTrace);
       return '克隆失败: ${_formatError(e)}';
-    }
-  }
-
-  /// 在隔离中执行克隆
-  Repository? _cloneInIsolate(RepoConfig config) {
-    try {
-      return Repository.clone(
-        url: config.repoUrl,
-        localPath: config.localPath,
-        callbacks: _createCallbacks(config),
-      );
-    } catch (e) {
-      _logger.error('GitService', '克隆操作异常', e);
-      return null;
     }
   }
 
@@ -268,337 +290,96 @@ class GitService {
   /// 预览提交信息（不执行推送）
   Future<String?> previewCommitMessage(String localPath) async {
     try {
-      return await Isolate.run(() => _previewCommitMessage(localPath));
-    } catch (e) {
+      _logger.debug('GitService', '开始预览提交信息');
+      return await compute(_previewCommitMessage, localPath);
+    } catch (e, stackTrace) {
+      _logger.error('GitService', '预览提交信息失败', e, stackTrace);
       return null;
     }
   }
   
-  /// 在 Isolate 中预览提交信息
-  static String? _previewCommitMessage(String localPath) {
-    Repository? repo;
-    try {
-      repo = Repository.open(localPath);
-      
-      // 收集变更的文件信息
-      final addedFiles = <String>[];
-      final modifiedFiles = <String>[];
-      final deletedFiles = <String>[];
-      
-      // 获取状态
-      final status = repo.status;
-      
-      // 如果状态为空，说明没有更改
-      if (status.isEmpty) {
-        repo.free();
-        return null;
+/// 预览提交信息（顶级函数，供 compute 使用）
+String? _previewCommitMessage(String localPath) {
+  Repository? repo;
+  try {
+    repo = Repository.open(localPath);
+
+    // 收集变更的文件信息
+    final addedFiles = <String>[];
+    final modifiedFiles = <String>[];
+    final deletedFiles = <String>[];
+
+    // 获取状态
+    final status = repo.status;
+
+    // 收集状态信息
+    for (final entry in status.entries) {
+      final path = entry.key;
+      final statusFlags = entry.value;
+      final fullPath = p.join(localPath, path);
+
+      if (statusFlags.contains(GitStatus.wtNew)) {
+        addedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.wtModified)) {
+        modifiedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.wtDeleted)) {
+        deletedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.indexNew)) {
+        addedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.indexModified)) {
+        modifiedFiles.add(fullPath);
       }
-      
-      // 收集状态信息
-      for (final entry in status.entries) {
-        final path = entry.key;
-        final statusFlags = entry.value;
-        final fullPath = p.join(localPath, path);
-        
-        if (statusFlags.contains(GitStatus.wtNew)) {
-          addedFiles.add(fullPath);
-        } else if (statusFlags.contains(GitStatus.wtModified)) {
-          modifiedFiles.add(fullPath);
-        } else if (statusFlags.contains(GitStatus.wtDeleted)) {
-          deletedFiles.add(fullPath);
-        }
-      }
-      
-      if (addedFiles.isEmpty && modifiedFiles.isEmpty && deletedFiles.isEmpty) {
-        repo.free();
-        return null;
-      }
-      
+    }
+
+    if (addedFiles.isEmpty && modifiedFiles.isEmpty && deletedFiles.isEmpty) {
       repo.free();
-      
-      // 生成提交信息
-      return _generateCommitMessage(
-        addedFiles: addedFiles,
-        modifiedFiles: modifiedFiles,
-        deletedFiles: deletedFiles,
-        localPath: localPath,
-      );
-    } catch (e) {
-      repo?.free();
       return null;
     }
+
+    repo.free();
+
+    // 生成提交信息
+    return _generateCommitMessage(
+      addedFiles: addedFiles,
+      modifiedFiles: modifiedFiles,
+      deletedFiles: deletedFiles,
+      localPath: localPath,
+    );
+  } catch (e) {
+    repo?.free();
+    return null;
   }
+}
 
   /// 推送仓库
   Future<String?> pushRepo(String localPath, RepoConfig config, {void Function(String)? onProgress}) async {
     try {
       _logger.info('GitService', '开始推送更新');
       _logger.debug('GitService', '仓库路径: $localPath');
-      
+
       // 在后台执行整个 Git 操作
-      final result = await Isolate.run(() => _doPushRepo(
-        localPath,
-        config,
-      ));
-      
+      final pushParams = _PushParams(
+        localPath: localPath,
+        branch: config.branch,
+        authUsername: config.authUsername,
+        authToken: config.authToken,
+      );
+
+      _logger.debug('GitService', '调用 compute 执行推送');
+      final result = await compute(_doPushRepo, pushParams);
+      _logger.debug('GitService', 'compute 返回: ${result ?? "成功"}');
+
       if (result == null) {
         _logger.info('GitService', '推送完成');
+      } else {
+        _logger.warning('GitService', '推送结果: $result');
       }
-      
+
       return result;
     } catch (e, stackTrace) {
       _logger.error('GitService', '推送失败', e, stackTrace);
       return '推送失败: ${_formatError(e)}';
     }
-  }
-  
-  /// 在 Isolate 中执行的推送操作
-  static String? _doPushRepo(String localPath, RepoConfig config) {
-    Repository? repo;
-    try {
-      repo = Repository.open(localPath);
-      
-      // 收集变更的文件信息
-      final addedFiles = <String>[];
-      final modifiedFiles = <String>[];
-      final deletedFiles = <String>[];
-      
-      // 获取状态
-      final status = repo.status;
-      
-      // 如果状态为空，尝试手动添加文件
-      if (status.isEmpty) {
-        final sourcePath = p.join(localPath, 'source', '_posts');
-        final postsDir = Directory(sourcePath);
-        
-        if (postsDir.existsSync()) {
-          for (final entity in postsDir.listSync()) {
-            if (entity is File && entity.path.endsWith('.md')) {
-              final relativePath = entity.path
-                  .replaceAll('\\', '/')
-                  .replaceAll('${localPath.replaceAll('\\', '/')}/', '');
-              
-              try {
-                repo.index.add(relativePath);
-                addedFiles.add(entity.path);
-              } catch (e) {
-                // 忽略错误
-              }
-            }
-          }
-        }
-        
-        if (addedFiles.isEmpty) {
-          repo.free();
-          return '没有需要推送的更改';
-        }
-        
-        repo.index.write();
-      } else {
-        // 添加所有更改到索引
-        for (final entry in status.entries) {
-          final path = entry.key;
-          final statusFlags = entry.value;
-          final fullPath = p.join(localPath, path);
-          
-          if (statusFlags.contains(GitStatus.wtNew)) {
-            repo.index.add(path);
-            addedFiles.add(fullPath);
-          } else if (statusFlags.contains(GitStatus.wtModified)) {
-            repo.index.add(path);
-            modifiedFiles.add(fullPath);
-          } else if (statusFlags.contains(GitStatus.wtDeleted)) {
-            repo.index.remove(path);
-            deletedFiles.add(fullPath);
-          }
-        }
-        
-        if (addedFiles.isEmpty && modifiedFiles.isEmpty && deletedFiles.isEmpty) {
-          repo.free();
-          return '没有需要推送的更改';
-        }
-        
-        repo.index.write();
-      }
-      
-      // 生成提交信息
-      final commitMessage = _generateCommitMessage(
-        addedFiles: addedFiles,
-        modifiedFiles: modifiedFiles,
-        deletedFiles: deletedFiles,
-        localPath: localPath,
-      );
-      
-      // 创建提交
-      final signature = Signature.create(
-        name: 'openHexo',
-        email: 'openhexo@app.local',
-      );
-      final tree = Tree.lookup(repo: repo, oid: repo.index.writeTree());
-      
-      Commit.create(
-        repo: repo,
-        updateRef: 'HEAD',
-        author: signature,
-        committer: signature,
-        message: commitMessage,
-        tree: tree,
-        parents: [
-          Commit.lookup(repo: repo, oid: repo.head.target),
-        ],
-      );
-      
-      // 推送到远程
-      final remote = Remote.lookup(repo: repo, name: 'origin');
-      final branchName = config.branch;
-      
-      // 创建凭据
-      Credentials? credentials;
-      if (config.authToken != null && config.authToken!.isNotEmpty) {
-        credentials = UserPass(
-          username: config.authUsername,
-          password: config.authToken!,
-        );
-      }
-      
-      remote.push(
-        refspecs: ['refs/heads/$branchName'],
-        callbacks: Callbacks(credentials: credentials),
-      );
-      
-      remote.free();
-      repo.free();
-      
-      return null;
-    } catch (e) {
-      repo?.free();
-      return '推送失败: $e';
-    }
-  }
-  
-  /// 生成符合 Git 社区规范的提交信息
-  static String _generateCommitMessage({
-    required List<String> addedFiles,
-    required List<String> modifiedFiles,
-    required List<String> deletedFiles,
-    required String localPath,
-  }) {
-    final buffer = StringBuffer();
-    
-    // 提取文章标题
-    final addedTitles = _extractArticleTitles(addedFiles, localPath);
-    final modifiedTitles = _extractArticleTitles(modifiedFiles, localPath);
-    final deletedTitles = _extractArticleTitles(deletedFiles, localPath);
-    
-    // 确定提交类型和标题
-    String type;
-    String subject;
-    
-    if (addedTitles.isNotEmpty && modifiedTitles.isEmpty && deletedTitles.isEmpty) {
-      type = 'feat';
-      subject = '新增 ${addedTitles.length} 篇文章';
-    } else if (deletedTitles.isNotEmpty && addedTitles.isEmpty && modifiedTitles.isEmpty) {
-      type = 'refactor';
-      subject = '删除 ${deletedTitles.length} 篇文章';
-    } else {
-      type = 'docs';
-      final totalChanges = addedTitles.length + modifiedTitles.length + deletedTitles.length;
-      subject = '更新 $totalChanges 篇文章';
-    }
-    
-    // 写入标题行
-    buffer.writeln('$type: $subject');
-    buffer.writeln();
-    
-    // 写入正文
-    if (addedTitles.isNotEmpty) {
-      buffer.writeln('新增文章:');
-      for (final title in addedTitles) {
-        buffer.writeln('- $title');
-      }
-      buffer.writeln();
-    }
-    
-    if (modifiedTitles.isNotEmpty) {
-      buffer.writeln('修改文章:');
-      for (final title in modifiedTitles) {
-        buffer.writeln('- $title');
-      }
-      buffer.writeln();
-    }
-    
-    if (deletedTitles.isNotEmpty) {
-      buffer.writeln('删除文章:');
-      for (final title in deletedTitles) {
-        buffer.writeln('- $title');
-      }
-    }
-    
-    return buffer.toString().trimRight();
-  }
-  
-  /// 从 Markdown 文件中提取文章标题
-  static List<String> _extractArticleTitles(List<String> filePaths, String localPath) {
-    final titles = <String>[];
-    
-    for (final filePath in filePaths) {
-      if (!filePath.endsWith('.md')) continue;
-      
-      try {
-        final file = File(filePath);
-        if (!file.existsSync()) continue;
-        
-        final content = file.readAsStringSync();
-        final title = _parseFrontMatterTitle(content);
-        
-        if (title != null && title.isNotEmpty) {
-          titles.add(title);
-        } else {
-          // 如果没有找到标题，使用文件名
-          final fileName = p.basenameWithoutExtension(filePath);
-          titles.add(fileName);
-        }
-      } catch (e) {
-        // 如果读取失败，使用文件名
-        final fileName = p.basenameWithoutExtension(filePath);
-        titles.add(fileName);
-      }
-    }
-    
-    return titles;
-  }
-  
-  /// 解析 Markdown 文件的 front matter 获取标题
-  static String? _parseFrontMatterTitle(String content) {
-    // 检查是否以 --- 开头
-    if (!content.startsWith('---')) return null;
-    
-    // 找到第二个 ---
-    final endIndex = content.indexOf('---', 3);
-    if (endIndex == -1) return null;
-    
-    // 提取 front matter
-    final frontMatter = content.substring(3, endIndex).trim();
-    
-    // 查找 title 字段
-    final lines = frontMatter.split('\n');
-    for (final line in lines) {
-      final trimmedLine = line.trim();
-      if (trimmedLine.startsWith('title:')) {
-        // 提取标题值
-        var title = trimmedLine.substring(6).trim();
-        
-        // 去除引号
-        if ((title.startsWith('"') && title.endsWith('"')) ||
-            (title.startsWith("'") && title.endsWith("'"))) {
-          title = title.substring(1, title.length - 1);
-        }
-        
-        return title.isNotEmpty ? title : null;
-      }
-    }
-    
-    return null;
   }
 
   /// 删除文章（从仓库中删除文件）
@@ -712,4 +493,310 @@ class GitService {
     
     return errorStr;
   }
+
+  /// 将文件添加到 Git 索引（用于跟踪新文件或修改的文件）
+  Future<void> addFileToIndex(String localPath, String filePath) async {
+    try {
+      _logger.debug('GitService', '添加文件到索引: $filePath');
+      final repo = Repository.open(localPath);
+
+      // 计算相对路径
+      final relativePath = filePath
+          .replaceAll('\\', '/')
+          .replaceAll('${localPath.replaceAll('\\', '/')}/', '');
+
+      repo.index.add(relativePath);
+      repo.index.write();
+      repo.free();
+
+      _logger.debug('GitService', '成功添加到索引: $relativePath');
+    } catch (e) {
+      _logger.warning('GitService', '添加文件到索引失败: $e');
+      // 忽略错误，不影响主流程
+    }
+  }
+}
+
+/// 克隆参数（用于 Isolate 传递，必须是简单数据类型）
+class _CloneParams {
+  final String repoUrl;
+  final String localPath;
+  final String authUsername;
+  final String? authToken;
+  
+  _CloneParams({
+    required this.repoUrl,
+    required this.localPath,
+    required this.authUsername,
+    this.authToken,
+  });
+}
+
+/// 克隆结果
+class _CloneResult {
+  final String? error;
+  
+  _CloneResult({required this.error});
+}
+
+/// 在后台 Isolate 中执行克隆（顶级函数，供 compute 使用）
+_CloneResult _cloneInIsolate(_CloneParams params) {
+  try {
+    // 创建认证凭据
+    Credentials? credentials;
+    if (params.authToken != null && params.authToken!.isNotEmpty) {
+      credentials = UserPass(
+        username: params.authUsername,
+        password: params.authToken!,
+      );
+    }
+
+    final repo = Repository.clone(
+      url: params.repoUrl,
+      localPath: params.localPath,
+      callbacks: Callbacks(credentials: credentials),
+    );
+    repo.free();
+    return _CloneResult(error: null);
+  } catch (e) {
+    return _CloneResult(error: '克隆失败: $e');
+  }
+}
+
+/// 推送参数
+class _PushParams {
+  final String localPath;
+  final String branch;
+  final String authUsername;
+  final String? authToken;
+
+  _PushParams({
+    required this.localPath,
+    required this.branch,
+    required this.authUsername,
+    this.authToken,
+  });
+}
+
+/// 在后台执行推送操作（顶级函数，供 compute 使用）
+String? _doPushRepo(_PushParams params) {
+  Repository? repo;
+  try {
+    repo = Repository.open(params.localPath);
+
+    // 收集变更的文件信息
+    final addedFiles = <String>[];
+    final modifiedFiles = <String>[];
+    final deletedFiles = <String>[];
+
+    // 获取状态
+    final status = repo.status;
+
+    // 添加所有更改到索引
+    for (final entry in status.entries) {
+      final path = entry.key;
+      final statusFlags = entry.value;
+      final fullPath = p.join(params.localPath, path);
+
+      if (statusFlags.contains(GitStatus.wtNew)) {
+        repo.index.add(path);
+        addedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.wtModified)) {
+        repo.index.add(path);
+        modifiedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.wtDeleted)) {
+        repo.index.remove(path);
+        deletedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.indexNew)) {
+        addedFiles.add(fullPath);
+      } else if (statusFlags.contains(GitStatus.indexModified)) {
+        modifiedFiles.add(fullPath);
+      }
+    }
+
+    if (addedFiles.isEmpty && modifiedFiles.isEmpty && deletedFiles.isEmpty) {
+      repo.free();
+      return '没有需要推送的更改';
+    }
+
+    repo.index.write();
+
+    // 生成提交信息
+    final commitMessage = _generateCommitMessage(
+      addedFiles: addedFiles,
+      modifiedFiles: modifiedFiles,
+      deletedFiles: deletedFiles,
+      localPath: params.localPath,
+    );
+
+    // 创建提交
+    final signature = Signature.create(
+      name: 'openHexo',
+      email: 'openhexo@app.local',
+    );
+    final tree = Tree.lookup(repo: repo, oid: repo.index.writeTree());
+
+    Commit.create(
+      repo: repo,
+      updateRef: 'HEAD',
+      author: signature,
+      committer: signature,
+      message: commitMessage,
+      tree: tree,
+      parents: [
+        Commit.lookup(repo: repo, oid: repo.head.target),
+      ],
+    );
+
+    // 推送到远程
+    final remote = Remote.lookup(repo: repo, name: 'origin');
+    final branchName = params.branch;
+
+    // 创建凭据
+    Credentials? credentials;
+    if (params.authToken != null && params.authToken!.isNotEmpty) {
+      credentials = UserPass(
+        username: params.authUsername,
+        password: params.authToken!,
+      );
+    }
+
+    remote.push(
+      refspecs: ['refs/heads/$branchName'],
+      callbacks: Callbacks(credentials: credentials),
+    );
+
+    remote.free();
+    repo.free();
+
+    return null;
+  } catch (e) {
+    repo?.free();
+    return '推送失败: $e';
+  }
+}
+
+/// 生成符合 Git 社区规范的提交信息
+String _generateCommitMessage({
+  required List<String> addedFiles,
+  required List<String> modifiedFiles,
+  required List<String> deletedFiles,
+  required String localPath,
+}) {
+  final buffer = StringBuffer();
+
+  // 提取文章标题
+  final addedTitles = _extractArticleTitles(addedFiles, localPath);
+  final modifiedTitles = _extractArticleTitles(modifiedFiles, localPath);
+  final deletedTitles = _extractArticleTitles(deletedFiles, localPath);
+
+  // 确定提交类型和标题
+  String type;
+  String subject;
+
+  if (addedTitles.isNotEmpty && modifiedTitles.isEmpty && deletedTitles.isEmpty) {
+    type = 'feat';
+    subject = '新增 ${addedTitles.length} 篇文章';
+  } else if (deletedTitles.isNotEmpty && addedTitles.isEmpty && modifiedTitles.isEmpty) {
+    type = 'refactor';
+    subject = '删除 ${deletedTitles.length} 篇文章';
+  } else {
+    type = 'docs';
+    final totalChanges = addedTitles.length + modifiedTitles.length + deletedTitles.length;
+    subject = '更新 $totalChanges 篇文章';
+  }
+
+  // 写入标题行
+  buffer.writeln('$type: $subject');
+  buffer.writeln();
+
+  // 写入正文
+  if (addedTitles.isNotEmpty) {
+    buffer.writeln('新增文章:');
+    for (final title in addedTitles) {
+      buffer.writeln('- $title');
+    }
+    buffer.writeln();
+  }
+
+  if (modifiedTitles.isNotEmpty) {
+    buffer.writeln('修改文章:');
+    for (final title in modifiedTitles) {
+      buffer.writeln('- $title');
+    }
+    buffer.writeln();
+  }
+
+  if (deletedTitles.isNotEmpty) {
+    buffer.writeln('删除文章:');
+    for (final title in deletedTitles) {
+      buffer.writeln('- $title');
+    }
+  }
+
+  return buffer.toString().trimRight();
+}
+
+/// 从 Markdown 文件中提取文章标题
+List<String> _extractArticleTitles(List<String> filePaths, String localPath) {
+  final titles = <String>[];
+
+  for (final filePath in filePaths) {
+    if (!filePath.endsWith('.md')) continue;
+
+    try {
+      final file = File(filePath);
+      if (!file.existsSync()) continue;
+
+      final content = file.readAsStringSync();
+      final title = _parseFrontMatterTitle(content);
+
+      if (title != null && title.isNotEmpty) {
+        titles.add(title);
+      } else {
+        // 如果没有找到标题，使用文件名
+        final fileName = p.basenameWithoutExtension(filePath);
+        titles.add(fileName);
+      }
+    } catch (e) {
+      // 如果读取失败，使用文件名
+      final fileName = p.basenameWithoutExtension(filePath);
+      titles.add(fileName);
+    }
+  }
+
+  return titles;
+}
+
+/// 解析 Markdown 文件的 front matter 获取标题
+String? _parseFrontMatterTitle(String content) {
+  // 检查是否以 --- 开头
+  if (!content.startsWith('---')) return null;
+
+  // 找到第二个 ---
+  final endIndex = content.indexOf('---', 3);
+  if (endIndex == -1) return null;
+
+  // 提取 front matter
+  final frontMatter = content.substring(3, endIndex).trim();
+
+  // 查找 title 字段
+  final lines = frontMatter.split('\n');
+  for (final line in lines) {
+    final trimmedLine = line.trim();
+    if (trimmedLine.startsWith('title:')) {
+      // 提取标题值
+      var title = trimmedLine.substring(6).trim();
+
+      // 去除引号
+      if ((title.startsWith('"') && title.endsWith('"')) ||
+          (title.startsWith("'") && title.endsWith("'"))) {
+        title = title.substring(1, title.length - 1);
+      }
+
+      return title.isNotEmpty ? title : null;
+    }
+  }
+
+  return null;
 }
