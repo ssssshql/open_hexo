@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../utils/app_info.dart';
 import 'logger_service.dart';
 
@@ -138,6 +139,17 @@ class UpdateService {
       );
 
       LoggerService().info('UpdateService', '下载完成: $filePath');
+
+      // 请求安装权限（Android 8.0+ 需要）
+      if (Platform.isAndroid) {
+        final status = await Permission.requestInstallPackages.request();
+        if (!status.isGranted) {
+          LoggerService().error('UpdateService', '安装权限被拒绝');
+          // 引导用户到设置页面开启权限
+          await openAppSettings();
+          return false;
+        }
+      }
 
       // 安装 APK
       final result = await OpenFile.open(
