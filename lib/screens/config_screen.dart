@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/app_state.dart';
 import '../models/repo_config.dart';
+import '../utils/app_info.dart';
 
 class ConfigScreen extends StatefulWidget {
   const ConfigScreen({super.key});
@@ -307,7 +308,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
             // 版本信息
             Center(
               child: Text(
-                'Open Hexo v1.0.0',
+                AppInfo.fullVersion,
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade500,

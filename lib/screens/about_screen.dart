@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/image_viewer.dart';
+import '../utils/app_info.dart';
 import 'log_screen.dart';
 
 class AboutScreen extends StatelessWidget {
@@ -90,7 +91,7 @@ class AboutScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '版本 1.0.0',
+                      '版本 ${AppInfo.version}',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.grey.shade600,
                       ),
@@ -376,7 +377,7 @@ class AboutScreen extends StatelessWidget {
 
   Widget _buildDonationCard(BuildContext context) {
     const donationImageUrl =
-        'https://picgo.19991029.xyz/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260327133527_246_36.jpg';
+        'https://picgo.19991029.xyz/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260327133527_246_36.png';
 
     return Card(
       child: Padding(
@@ -416,9 +417,10 @@ class AboutScreen extends StatelessWidget {
                 onTap: () => ImageViewer.show(context, donationImageUrl),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 250,
+                  child: Container(
+                    width: 240,
                     height: 300,
+                    color: Colors.transparent,
                     child: Image.network(
                       donationImageUrl,
                       fit: BoxFit.cover,

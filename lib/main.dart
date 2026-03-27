@@ -5,9 +5,13 @@ import 'package:git2dart/git2dart.dart';
 import 'providers/app_state.dart';
 import 'screens/home_screen.dart';
 import 'services/logger_service.dart';
+import 'utils/app_info.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 初始化应用信息
+  await AppInfo.init();
   
   // 初始化日志服务
   final logger = LoggerService();
