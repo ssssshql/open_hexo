@@ -746,7 +746,12 @@ List<String> _extractArticleTitles(List<String> filePaths, String localPath) {
 
     try {
       final file = File(filePath);
-      if (!file.existsSync()) continue;
+      if (!file.existsSync()) {
+        // 文件不存在（已删除），使用文件名作为标题
+        final fileName = p.basenameWithoutExtension(filePath);
+        titles.add(fileName);
+        continue;
+      }
 
       final content = file.readAsStringSync();
       final title = _parseFrontMatterTitle(content);
