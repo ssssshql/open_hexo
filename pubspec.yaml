@@ -65,6 +65,9 @@ dependencies:
   # 图片保存
   gal: ^2.3.0
   dio: ^5.4.0
+  
+  # 打开链接
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -76,6 +79,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -118,3 +122,13 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+# 应用图标配置
+flutter_launcher_icons:
+  # 为 Android 配置图标
+  android: true
+  # 为 iOS 配置图标
+  ios: true
+  # 指定图标图片路径
+  image_path: "assets/images/a_appicon.png"
+  # android min sdk min:16, default 21
+  # min_sdk_android: 21

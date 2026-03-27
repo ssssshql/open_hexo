@@ -10,8 +10,9 @@ import '../models/article.dart';
 
 class ArticleEditScreen extends StatefulWidget {
   final Article? article;
+  final String? heroTag;
 
-  const ArticleEditScreen({super.key, this.article});
+  const ArticleEditScreen({super.key, this.article, this.heroTag});
 
   @override
   State<ArticleEditScreen> createState() => _ArticleEditScreenState();
@@ -204,188 +205,406 @@ class _ArticleEditScreenState extends State<ArticleEditScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        title: Text(_isEdit ? '编辑文章' : '新建文章'),
-        actions: [
-          // 编辑/预览切换
-          IconButton(
-            icon: Icon(_isPreview ? Icons.edit : Icons.visibility),
-            onPressed: () => setState(() => _isPreview = !_isPreview),
-            tooltip: _isPreview ? '编辑' : '预览',
+  void _showEditMetaDialog(BuildContext context) {
+    final titleController = TextEditingController(text: _titleController.text);
+    final tagsController = TextEditingController(text: _tagsController.text);
+    final categoriesController = TextEditingController(text: _categoriesController.text);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑文章信息'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: '文章标题 *',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: tagsController,
+                decoration: const InputDecoration(
+                  labelText: '标签',
+                  hintText: '逗号分隔',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: categoriesController,
+                decoration: const InputDecoration(
+                  labelText: '分类',
+                  hintText: '逗号分隔',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  isDense: true,
+                ),
+              ),
+            ],
           ),
-          if (_isEdit)
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: _deleteArticle,
-            ),
-          IconButton(icon: const Icon(Icons.save), onPressed: _saveArticle),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _titleController.text = titleController.text;
+                _tagsController.text = tagsController.text;
+                _categoriesController.text = categoriesController.text;
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('确定'),
+          ),
         ],
       ),
+    );
+  }
+
+  (IconData, Color) _getArticleIcon() {
+    final tags = _tagsController.text.split(',').map((t) => t.trim().toLowerCase()).where((t) => t.isNotEmpty).toList();
+    final categories = _categoriesController.text.split(',').map((c) => c.trim().toLowerCase()).where((c) => c.isNotEmpty).toList();
+    final allKeywords = [...tags, ...categories];
+    final content = _contentController.text.toLowerCase();
+
+    // 技术相关
+    if (allKeywords.any((k) => ['代码', 'code', '编程', 'programming', '开发', 'development'].contains(k))) {
+      return (Icons.code, const Color(0xFF6B7280));
+    }
+    if (allKeywords.any((k) => ['flutter', 'dart'].contains(k))) {
+      return (Icons.flutter_dash, const Color(0xFF02569B));
+    }
+    if (allKeywords.any((k) => ['前端', 'frontend', 'vue', 'react', 'angular'].contains(k))) {
+      return (Icons.web, const Color(0xFF42B883));
+    }
+    if (allKeywords.any((k) => ['后端', 'backend', 'server', 'node', 'java', 'python'].contains(k))) {
+      return (Icons.dns, const Color(0xFF3776AB));
+    }
+    if (allKeywords.any((k) => ['数据库', 'database', 'mysql', 'mongodb', 'sql'].contains(k))) {
+      return (Icons.storage, const Color(0xFF00758F));
+    }
+    if (allKeywords.any((k) => ['git', 'github', '版本控制'].contains(k))) {
+      return (Icons.source, const Color(0xFFF05032));
+    }
+    if (allKeywords.any((k) => ['docker', 'k8s', 'kubernetes', 'devops'].contains(k))) {
+      return (Icons.cloud_queue, const Color(0xFF2496ED));
+    }
+    if (allKeywords.any((k) => ['ai', '人工智能', 'machine learning', '机器学习'].contains(k))) {
+      return (Icons.psychology, const Color(0xFFFF6F00));
+    }
+
+    // 生活相关
+    if (allKeywords.any((k) => ['生活', 'life', '日常', 'daily'].contains(k))) {
+      return (Icons.local_cafe, const Color(0xFF8D6E63));
+    }
+    if (allKeywords.any((k) => ['旅行', 'travel', '旅游', '游记'].contains(k))) {
+      return (Icons.flight, const Color(0xFF00ACC1));
+    }
+    if (allKeywords.any((k) => ['美食', 'food', '烹饪', 'cooking'].contains(k))) {
+      return (Icons.restaurant, const Color(0xFFEF5350));
+    }
+    if (allKeywords.any((k) => ['音乐', 'music', '歌'].contains(k))) {
+      return (Icons.music_note, const Color(0xFFAB47BC));
+    }
+    if (allKeywords.any((k) => ['电影', 'movie', '影视', '剧'].contains(k))) {
+      return (Icons.movie, const Color(0xFFE91E63));
+    }
+    if (allKeywords.any((k) => ['读书', 'reading', '书评', 'book'].contains(k))) {
+      return (Icons.book, const Color(0xFF795548));
+    }
+    if (allKeywords.any((k) => ['摄影', 'photo', '照片', 'photography'].contains(k))) {
+      return (Icons.camera_alt, const Color(0xFF009688));
+    }
+    if (allKeywords.any((k) => ['游戏', 'game', 'gaming'].contains(k))) {
+      return (Icons.sports_esports, const Color(0xFF9C27B0));
+    }
+
+    // 其他主题
+    if (allKeywords.any((k) => ['教程', 'tutorial', '学习', 'learn'].contains(k))) {
+      return (Icons.school, const Color(0xFF3F51B5));
+    }
+    if (allKeywords.any((k) => ['想法', 'idea', '思考', 'thinking'].contains(k))) {
+      return (Icons.lightbulb_outline, const Color(0xFFFFC107));
+    }
+    if (allKeywords.any((k) => ['项目', 'project', '作品'].contains(k))) {
+      return (Icons.work_outline, const Color(0xFF607D8B));
+    }
+    if (allKeywords.any((k) => ['总结', 'summary', '回顾', 'review'].contains(k))) {
+      return (Icons.summarize, const Color(0xFF00BCD4));
+    }
+
+    // 根据内容判断
+    if (content.contains('```') || content.contains('function') || content.contains('class ')) {
+      return (Icons.code, const Color(0xFF6B7280));
+    }
+
+    // 默认图标
+    return (Icons.article, const Color(0xFF5C6BC0));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (iconData, iconColor) = _getArticleIcon();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Form(
         key: _formKey,
         child: Column(
           children: [
-            // 标题、标签、分类区域
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _titleController,
-                    decoration: InputDecoration(
-                      label: RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '文章标题 ',
-                              style: TextStyle(color: Colors.grey.shade700),
+            // 固定标题栏
+            Material(
+              color: colorScheme.surface,
+              elevation: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // 返回按钮
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          icon: Icon(Icons.arrow_back, size: 20, color: Colors.grey.shade700),
+                          tooltip: '返回',
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Hero区域
+                      if (widget.heroTag != null)
+                        Hero(
+                          tag: widget.heroTag!,
+                          child: Material(
+                            color: iconColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Icon(iconData, size: 20, color: iconColor),
                             ),
-                            const TextSpan(
-                              text: '*',
-                              style: TextStyle(color: Colors.red),
+                          ),
+                        )
+                      else
+                        Material(
+                          color: iconColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Icon(iconData, size: 20, color: iconColor),
+                          ),
+                        ),
+                      const SizedBox(width: 10),
+                      // 标题和日期
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _titleController.text.isEmpty ? '新文章' : _titleController.text,
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.calendar_today_outlined, size: 12, color: Colors.grey.shade500),
+                                const SizedBox(width: 3),
+                                Text(
+                                  widget.article?.date.split('T').first ?? DateTime.now().toIso8601String().split('T').first,
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return '请输入标题';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _tagsController,
-                          decoration: const InputDecoration(
-                            labelText: '标签',
-                            hintText: '逗号分隔',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            isDense: true,
-                          ),
+                      // 操作按钮 - 更紧凑
+                      if (_isEdit)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          color: Colors.red,
+                          onPressed: _deleteArticle,
+                          tooltip: '删除',
+                          padding: const EdgeInsets.all(6),
+                          constraints: const BoxConstraints(),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _categoriesController,
-                          decoration: const InputDecoration(
-                            labelText: '分类',
-                            hintText: '逗号分隔',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // 内容区域
-            Expanded(child: _isPreview ? _buildPreview() : _buildEditor()),
-          ],
-        ),
-      ),
-      // 底部工具栏
-      bottomNavigationBar: !_isPreview
-          ? Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                border: Border(top: BorderSide(color: Colors.grey.shade300)),
-              ),
-              child: SafeArea(
-                child: Container(
-                  height: 48,
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    children: [
                       IconButton(
-                        icon: const Icon(Icons.title),
-                        onPressed: _insertHeading,
-                        tooltip: '标题',
+                        icon: Icon(_isPreview ? Icons.edit_outlined : Icons.visibility_outlined, size: 20),
+                        onPressed: () => setState(() => _isPreview = !_isPreview),
+                        tooltip: _isPreview ? '编辑' : '预览',
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.format_bold),
-                        onPressed: _insertBold,
-                        tooltip: '粗体',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.code),
-                        onPressed: _insertCodeBlock,
-                        tooltip: '代码块',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.link),
-                        onPressed: _insertLink,
-                        tooltip: '链接',
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${_contentController.text.length}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        icon: const Icon(Icons.save_outlined, size: 20),
+                        onPressed: _saveArticle,
+                        tooltip: '保存',
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
                 ),
               ),
-            )
-          : null,
-    );
-  }
-
-  Widget _buildEditor() {
-    return Container(
-      color: Colors.grey.shade50,
-      child: TextField(
-        controller: _contentController,
-        scrollController: _editorScrollController,
-        decoration: const InputDecoration(
-          hintText: '在此输入 Markdown 内容...',
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.all(16),
+            ),
+            // 元信息区域（点击编辑）
+            InkWell(
+              onTap: () => _showEditMetaDialog(context),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_note, size: 18, color: Colors.grey.shade500),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _titleController.text.isEmpty ? '点击设置标题...' : _titleController.text,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: _titleController.text.isEmpty ? Colors.grey : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              if (_tagsController.text.isNotEmpty)
+                                Expanded(
+                                  child: Text(
+                                    '标签: ${_tagsController.text}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              if (_categoriesController.text.isNotEmpty) ...[
+                                if (_tagsController.text.isNotEmpty)
+                                  Text(' · ', style: TextStyle(color: Colors.grey.shade400)),
+                                Expanded(
+                                  child: Text(
+                                    '分类: ${_categoriesController.text}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                              if (_tagsController.text.isEmpty && _categoriesController.text.isEmpty)
+                                Text(
+                                  '点击设置标签、分类...',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, size: 20, color: Colors.grey.shade400),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            // 编辑区域
+            Expanded(
+              child: _isPreview
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: _MarkdownPreview(content: _contentController.text),
+                      ),
+                    )
+                  : TextField(
+                      controller: _contentController,
+                      scrollController: _editorScrollController,
+                      decoration: const InputDecoration(
+                        hintText: '在此输入 Markdown 内容...',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(16),
+                      ),
+                      maxLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        height: 1.6,
+                      ),
+                    ),
+            ),
+            // 底部工具栏
+            if (!_isPreview)
+              Material(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: SafeArea(
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: Colors.grey.shade300)),
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.title),
+                          onPressed: _insertHeading,
+                          tooltip: '标题',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.format_bold),
+                          onPressed: _insertBold,
+                          tooltip: '粗体',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.code),
+                          onPressed: _insertCodeBlock,
+                          tooltip: '代码块',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.link),
+                          onPressed: _insertLink,
+                          tooltip: '链接',
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${_contentController.text.length}',
+                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 14,
-          height: 1.6,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPreview() {
-    return Container(
-      color: Colors.white,
-      child: SingleChildScrollView(
-        controller: _previewScrollController,
-        padding: const EdgeInsets.all(16),
-        child: _MarkdownPreview(content: _contentController.text),
       ),
     );
   }

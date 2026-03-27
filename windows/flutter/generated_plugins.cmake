@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   gal
   git2dart_binaries
+  url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

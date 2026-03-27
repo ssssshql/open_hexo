@@ -131,18 +131,22 @@ class _LogScreenState extends State<LogScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Container(
-              color: const Color(0xFF1E1E1E),
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(12),
-                child: SelectableText(
-                  _logContent,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    height: 1.5,
-                    color: Color(0xFFD4D4D4),
+          : SafeArea(
+              child: Container(
+                color: const Color(0xFF1E1E1E),
+                width: double.infinity,
+                height: double.infinity,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(12),
+                  child: SelectableText(
+                    _logContent,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      height: 1.5,
+                      color: Color(0xFFD4D4D4),
+                    ),
                   ),
                 ),
               ),

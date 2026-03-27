@@ -1,4 +1,4 @@
-package com.example.open_hexo
+package com.ssssshql.open_hexo
 
 import io.flutter.embedding.android.FlutterActivity
 
