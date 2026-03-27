@@ -1,4 +1,6 @@
 {
-    "version": "1.0.1",
-    "build_time": "2025-12-12 12:12:12"
+    "version": "1.0.0",
+    "build_time": "2025-12-12 12:12:12",
+    "arm64-v8a": "https://github.com/ssssshql/open_hexo/releases/download/v1.0.0/open-hexo-v1.0.0-arm64-v8a.apk",
+    "armeabi-v7a": "https://github.com/ssssshql/open_hexo/releases/download/v1.0.0/open-hexo-v1.0.0-armeabi-v7a.apk"
 }

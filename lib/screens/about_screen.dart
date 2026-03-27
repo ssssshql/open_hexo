@@ -1,12 +1,32 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/image_viewer.dart';
 import '../utils/app_info.dart';
+import '../services/update_service.dart';
 import 'log_screen.dart';
 
-class AboutScreen extends StatelessWidget {
+class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
+
+  @override
+  State<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends State<AboutScreen> {
+  bool _checkingUpdate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 进入页面时自动检查更新（仅 Android）
+    if (Platform.isAndroid) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkForUpdate(autoCheck: true);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +78,136 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
+  /// 检查更新
+  /// [autoCheck] 是否为自动检查（进入页面时），自动检查不显示"已是最新版本"提示
+  Future<void> _checkForUpdate({bool autoCheck = false}) async {
+    if (_checkingUpdate) return;
+
+    setState(() => _checkingUpdate = true);
+
+    try {
+      final result = await UpdateService.checkUpdate();
+
+      if (!mounted) return;
+
+      switch (result.status) {
+        case UpdateStatus.hasUpdate:
+          // 有新版本，显示更新对话框
+          _showUpdateDialog(result.versionInfo!);
+        case UpdateStatus.noUpdate:
+          // 已是最新版本，仅手动检查时提示
+          if (!autoCheck) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('当前已是最新版本')),
+            );
+          }
+        case UpdateStatus.networkError:
+          // 网络错误
+          if (!autoCheck) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('暂时无法访问服务器')),
+            );
+          }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _checkingUpdate = false);
+      }
+    }
+  }
+
+  /// 显示更新对话框
+  void _showUpdateDialog(VersionInfo versionInfo) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('发现新版本'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('最新版本：${versionInfo.version}'),
+            const SizedBox(height: 8),
+            Text('当前版本：${AppInfo.version}'),
+            if (versionInfo.buildTime.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('发布时间：${versionInfo.buildTime}'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('稍后再说'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _startUpdate(versionInfo);
+            },
+            child: const Text('立即更新'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 开始更新
+  void _startUpdate(VersionInfo versionInfo) {
+    if (!Platform.isAndroid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('暂只支持 Android 平台自动更新')),
+      );
+      return;
+    }
+
+    final downloadUrl = UpdateService.getDownloadUrl(versionInfo);
+    if (downloadUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未找到适配的安装包')),
+      );
+      return;
+    }
+
+    final progressNotifier = ValueNotifier<int>(0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ValueListenableBuilder<int>(
+        valueListenable: progressNotifier,
+        builder: (ctx, progress, _) => AlertDialog(
+          title: const Text('正在下载'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(value: progress / 100),
+              const SizedBox(height: 16),
+              Text('$progress%'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    UpdateService.downloadAndInstall(
+      downloadUrl,
+      onProgress: (p) {
+        progressNotifier.value = p;
+      },
+    ).then((success) {
+      progressNotifier.dispose();
+      if (mounted) {
+        Navigator.pop(context); // 关闭进度对话框
+        if (!success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('更新失败，请稍后重试')),
+          );
+        }
+      }
+    });
+  }
+
   Widget _buildAppInfoCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -99,6 +249,19 @@ class AboutScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              // 检查更新按钮
+              if (Platform.isAndroid)
+                TextButton.icon(
+                  onPressed: _checkingUpdate ? null : _checkForUpdate,
+                  icon: _checkingUpdate
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.system_update, size: 18),
+                  label: Text(_checkingUpdate ? '检查中' : '检查更新'),
+                ),
             ],
           ),
           const SizedBox(height: 16),
